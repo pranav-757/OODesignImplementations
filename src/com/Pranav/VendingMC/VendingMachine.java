@@ -7,6 +7,13 @@ import com.Pranav.VendingMC.enums.Item;
 import com.Pranav.VendingMC.exceptions.NotFullPaidException;
 import com.Pranav.VendingMC.exceptions.NotSufficientChangeException;
 import com.Pranav.VendingMC.exceptions.SoldOutException;
+import com.Pranav.VendingMC.states.IMachineState;
+import com.Pranav.VendingMC.states.impl.CollectChange;
+import com.Pranav.VendingMC.states.impl.DispenseItem;
+import com.Pranav.VendingMC.states.impl.InsertMoney;
+import com.Pranav.VendingMC.states.impl.Ready;
+import com.Pranav.VendingMC.util.IChangeCalcutaionService;
+import com.Pranav.VendingMC.util.impl.GreedyCalculation;
 
 import java.util.*;
 
@@ -22,11 +29,16 @@ public class VendingMachine  {
     private Inventory<Coin> cashInventory = new Inventory<Coin>();
     private Inventory<Item> itemInventory = new Inventory<Item>();
     private Map<Integer, Item> itemCodeMap;
+    private IMachineState state;
     private long totalSales;
     private Item currentItem;
     private long currentBalance;
+    private IChangeCalcutaionService changeCalcutaionService;
 
     public VendingMachine(){
+
+        this.state = new Ready(this);
+        this.changeCalcutaionService = new GreedyCalculation();
         initialize();
     }
 
@@ -38,7 +50,7 @@ public class VendingMachine  {
         }
 
         for(Item i : Item.values()){
-            itemInventory.put(i, 5);
+            itemInventory.put(i, 2);
         }
 
         itemCodeMap = new HashMap<>();
@@ -46,9 +58,40 @@ public class VendingMachine  {
         for(int i=1; i<=Item.values().length; i++) {
             itemCodeMap.put(i, Item.values()[i-1] );
         }
-
     }
 
+    public IMachineState getState() {
+        return state;
+    }
+
+    public void setState(IMachineState state) {
+        this.state = state;
+    }
+
+    public void toNextState() {
+            String stateName = this.getState().getStateName();
+            switch (stateName) {
+                case "READY":
+                    this.state = new InsertMoney(this);
+                    this.state.process();
+                    break;
+                case "INSERT_MONEY" :
+                    this.state = new DispenseItem(this);
+                    this.state.process();
+                    break;
+                case "DISPENSE_ITEM":
+                    this.state = new CollectChange(this);
+                    this.state.process();
+                    break;
+                case "COLLECT_CHANGE":
+                    this.state = new Ready(this);
+                    //this.state.process();
+                default:
+                    throw new RuntimeException("Invalid Machine state");
+            }
+    }
+
+    //1. Selecting Item
     public void selectItem() {
 
         System.out.println("Please select an item");
@@ -65,7 +108,7 @@ public class VendingMachine  {
         System.out.println("Please pay:" + price);
     }
 
-    public long selectItemAndGetPrice(Item item) {
+    private long selectItemAndGetPrice(Item item) {
         if(itemInventory.hasItem(item)){
             currentItem = item;
             return currentItem.getPrice();
@@ -73,8 +116,10 @@ public class VendingMachine  {
         throw new SoldOutException("Sold Out, Please buy another item");
     }
 
-    public void insertCash() {
-        System.out.println("Please insert 1, 2, 5 OR 10. -1 to quit");
+
+    //2. insert money
+    public void insertMoney() {
+        System.out.println("Please insert 1, 5, 10, 25. -1 to quit");
 
         Scanner ip = new Scanner(System.in);
         int coinValue = ip.nextInt();
@@ -96,26 +141,13 @@ public class VendingMachine  {
         cashInventory.add(coin);
     }
 
-    public void collectItemAndChange() {
-        Item item = collectItem();
-        totalSales = totalSales + currentItem.getPrice();
-
-        System.out.println("Collect " + item.getName());
-
-        List<Coin> change = collectChange();
-
-        System.out.println("Please collect your change");
-        for(Coin c: change) {
-            System.out.println("collect coin:" + c.getDenomination());
-        }
-        //return new Bucket<Item, List<Coin>>(item, change);
-    }
-
-    private Item collectItem() throws NotSufficientChangeException,
+    //3.dispense Item
+    public Item dispenseItem() throws NotSufficientChangeException,
             NotFullPaidException {
         if(isFullPaid()){
             if(hasSufficientChange()){
                 itemInventory.deductItem(currentItem);
+                totalSales = totalSales + currentItem.getPrice();
                 return currentItem;
             }
             throw new NotSufficientChangeException("Not Sufficient change in Inventory");
@@ -126,17 +158,19 @@ public class VendingMachine  {
                 remainingBalance);
     }
 
-    private List<Coin> collectChange() {
+    //4.collect change
+    public List<Coin> collectChange() {
         long changeAmount = currentBalance - currentItem.getPrice();
-        List<Coin> change = getChange(changeAmount);
+        List<Coin> change = changeCalcutaionService.calculateChange(changeAmount, cashInventory);
         updateCashInventory(change);
         currentBalance = 0;
         currentItem = null;
         return change;
     }
 
+    //5.refund
     public List<Coin> refund(){
-        List<Coin> refund = getChange(currentBalance);
+        List<Coin> refund = changeCalcutaionService.calculateChange(currentBalance, cashInventory);;
         updateCashInventory(refund);
         System.out.println("Please collect your refund");
         for(Coin c: refund) {
@@ -153,47 +187,6 @@ public class VendingMachine  {
             return true;
         }
         return false;
-    }
-
-
-    private List<Coin> getChange(long amount) throws NotSufficientChangeException{
-        List<Coin> changes = Collections.EMPTY_LIST;
-
-        if(amount > 0){
-            changes = new ArrayList<Coin>();
-            long balance = amount;
-            while(balance > 0){
-                if(balance >= Coin.QUARTER.getDenomination()
-                        && cashInventory.hasItem(Coin.QUARTER)){
-                    changes.add(Coin.QUARTER);
-                    balance = balance - Coin.QUARTER.getDenomination();
-                    continue;
-
-                }else if(balance >= Coin.DIME.getDenomination()
-                        && cashInventory.hasItem(Coin.DIME)) {
-                    changes.add(Coin.DIME);
-                    balance = balance - Coin.DIME.getDenomination();
-                    continue;
-
-                }else if(balance >= Coin.NICKLE.getDenomination()
-                        && cashInventory.hasItem(Coin.NICKLE)) {
-                    changes.add(Coin.NICKLE);
-                    balance = balance - Coin.NICKLE.getDenomination();
-                    continue;
-
-                }else if(balance >= Coin.PENNY.getDenomination()
-                        && cashInventory.hasItem(Coin.PENNY)) {
-                    changes.add(Coin.PENNY);
-                    balance = balance - Coin.PENNY.getDenomination();
-                    continue;
-
-                }else{
-                    throw new NotSufficientChangeException("NotSufficientChange, Please try another product");
-                }
-            }
-        }
-
-        return changes;
     }
 
     public void reset(){
@@ -218,7 +211,7 @@ public class VendingMachine  {
     private boolean hasSufficientChangeForAmount(long amount){
         boolean hasChange = true;
         try{
-            getChange(amount);
+            changeCalcutaionService.calculateChange(amount, cashInventory);;
         }catch(NotSufficientChangeException nsce){
             return hasChange = false;
         }

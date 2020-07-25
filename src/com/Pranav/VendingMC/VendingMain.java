@@ -15,14 +15,15 @@ public class VendingMain {
             if(command.equalsIgnoreCase("quit"))
                break;
 
-            try{
-                machine.selectItem();
-                machine.insertCash();
-                machine.collectItemAndChange();
-            } catch (RuntimeException e) {
-                System.out.println("Error :"+ e.getMessage());
-                machine.refund();
-            }
+            machine.getState().process();
+//            try{
+//                machine.selectItem();
+//                machine.insertMoney();
+//                machine.collectItemAndChange();
+//            } catch (RuntimeException e) {
+//                System.out.println("Error :"+ e.getMessage());
+//                machine.refund();
+//            }
 
         }
 
