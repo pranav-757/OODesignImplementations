@@ -17,14 +17,6 @@ import com.Pranav.VendingMC.util.impl.GreedyCalculation;
 
 import java.util.*;
 
-/**
- * Sample implementation of Vending Machine in Java
- * @author Javin Paul
- * @reference https://javarevisited.blogspot.com/2016/06/design-vending-machine-in-java.html
- * https://medium.com/swlh/vending-machine-design-a-state-design-pattern-approach-5b7e1a026cd2
- * https://leetcode.com/discuss/interview-question/125218/design-a-vending-machine
- * Read more: https://javarevisited.blogspot.com/2016/06/design-vending-machine-in-java.html#ixzz6T4fSIcR7
- */
 public class VendingMachine  {
     private Inventory<Coin> cashInventory = new Inventory<Coin>();
     private Inventory<Item> itemInventory = new Inventory<Item>();
